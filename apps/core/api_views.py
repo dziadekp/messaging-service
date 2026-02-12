@@ -18,9 +18,26 @@ from .middleware.auth import HasServiceAPIKey
 from .models import ContactProfile, Conversation, Message
 from .services.rate_limiter import RateLimiter
 from .services.state_machine import StateMachine
+from .services.telegram_adapter import TelegramAdapter
 from .services.whatsapp_adapter import WhatsAppAdapter
 
 logger = logging.getLogger(__name__)
+
+
+def _get_adapter(contact):
+    """Return the appropriate messaging adapter for a contact."""
+    if contact.preferred_channel == "telegram":
+        return TelegramAdapter(), "telegram"
+    return WhatsAppAdapter(), "whatsapp"
+
+
+def _get_recipient(contact, channel):
+    """Return the recipient identifier for the given channel."""
+    if channel == "telegram":
+        if not contact.telegram_chat_id:
+            return None
+        return contact.telegram_chat_id
+    return contact.phone_e164
 
 
 class SendMessageView(APIView):
@@ -54,6 +71,15 @@ class SendMessageView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
+        # Determine channel and adapter
+        adapter, channel = _get_adapter(contact)
+        recipient = _get_recipient(contact, channel)
+        if recipient is None:
+            return Response(
+                {"error": f"Contact has no {channel} address configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Create message record (standalone, no conversation)
         message = Message.objects.create(
             direction="outbound",
@@ -61,38 +87,38 @@ class SendMessageView(APIView):
             status="queued",
         )
 
-        # Send via WhatsApp
-        adapter = WhatsAppAdapter()
+        # Send via selected channel
         try:
-            if data.get("template_name"):
-                result = adapter.send_template_message(
-                    to_phone=contact.phone_e164,
-                    template_name=data["template_name"],
-                    params=data.get("template_params"),
-                )
+            if channel == "telegram":
+                result = adapter.send_text_message(chat_id=recipient, body=data["body"])
+                has_error = not result.get("ok", False)
+                error_msg = result.get("error", result.get("description", "Unknown error"))
+                channel_message_id = str(result.get("result", {}).get("message_id", "")) if not has_error else ""
             else:
-                result = adapter.send_text_message(
-                    to_phone=contact.phone_e164,
-                    body=data["body"],
-                )
+                # WhatsApp
+                if data.get("template_name"):
+                    result = adapter.send_template_message(
+                        to_phone=recipient,
+                        template_name=data["template_name"],
+                        params=data.get("template_params"),
+                    )
+                else:
+                    result = adapter.send_text_message(to_phone=recipient, body=data["body"])
+                has_error = "error" in result
+                error_msg = result.get("error", "Unknown error")
+                channel_message_id = result.get("messages", [{}])[0].get("id", "") if not has_error else ""
 
-            if "error" in result:
+            if has_error:
                 message.status = "failed"
-                message.error_message = result.get("error", "Unknown error")
+                message.error_message = error_msg
                 message.save(update_fields=["status", "error_message"])
-                return Response(
-                    {"error": result["error"]},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+                return Response({"error": error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # Update message with WhatsApp message ID
-            channel_message_id = result.get("messages", [{}])[0].get("id")
             message.channel_message_id = channel_message_id
             message.status = "sent"
             message.sent_at = now()
             message.save(update_fields=["channel_message_id", "status", "sent_at"])
 
-            # Record rate limit
             rate_limiter.record(str(contact.id))
 
             return Response(
@@ -105,7 +131,7 @@ class SendMessageView(APIView):
             )
 
         except Exception as e:
-            logger.exception("Failed to send message")
+            logger.exception("Failed to send message via %s", channel)
             message.status = "failed"
             message.error_message = str(e)
             message.save(update_fields=["status", "error_message"])
@@ -146,9 +172,19 @@ class StartConversationView(APIView):
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
 
+        # Determine channel and adapter
+        adapter, channel = _get_adapter(contact)
+        recipient = _get_recipient(contact, channel)
+        if recipient is None:
+            return Response(
+                {"error": f"Contact has no {channel} address configured"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Create conversation
         conversation = Conversation.objects.create(
             contact=contact,
+            channel=channel,
             context_type=data["context_type"],
             context_id=data["context_id"],
             context_data=data.get("context_data", {}),
@@ -165,45 +201,47 @@ class StartConversationView(APIView):
             status="queued",
         )
 
-        # Send via WhatsApp
-        adapter = WhatsAppAdapter()
+        # Send via selected channel
         try:
             buttons = data.get("buttons", [])
-            if buttons:
-                result = adapter.send_interactive_message(
-                    to_phone=contact.phone_e164,
-                    body=data["initial_message"],
-                    buttons=buttons,
-                )
+            if channel == "telegram":
+                if buttons:
+                    result = adapter.send_interactive_message(
+                        chat_id=recipient, body=data["initial_message"], buttons=buttons
+                    )
+                else:
+                    result = adapter.send_text_message(chat_id=recipient, body=data["initial_message"])
+                has_error = not result.get("ok", False)
+                error_msg = result.get("error", result.get("description", "Unknown error"))
+                channel_message_id = str(result.get("result", {}).get("message_id", "")) if not has_error else ""
             else:
-                result = adapter.send_text_message(
-                    to_phone=contact.phone_e164,
-                    body=data["initial_message"],
-                )
+                # WhatsApp
+                if buttons:
+                    result = adapter.send_interactive_message(
+                        to_phone=recipient, body=data["initial_message"], buttons=buttons
+                    )
+                else:
+                    result = adapter.send_text_message(to_phone=recipient, body=data["initial_message"])
+                has_error = "error" in result
+                error_msg = result.get("error", "Unknown error")
+                channel_message_id = result.get("messages", [{}])[0].get("id", "") if not has_error else ""
 
-            if "error" in result:
+            if has_error:
                 message.status = "failed"
-                message.error_message = result.get("error", "Unknown error")
+                message.error_message = error_msg
                 message.save(update_fields=["status", "error_message"])
                 conversation.status = "failed"
                 conversation.save(update_fields=["status"])
-                return Response(
-                    {"error": result["error"]},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+                return Response({"error": error_msg}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            # Update message with WhatsApp message ID
-            channel_message_id = result.get("messages", [{}])[0].get("id")
             message.channel_message_id = channel_message_id
             message.status = "sent"
             message.sent_at = now()
             message.save(update_fields=["channel_message_id", "status", "sent_at"])
 
-            # Transition conversation state
             state_machine = StateMachine()
             state_machine.transition(conversation, "on_send")
 
-            # Record rate limit
             rate_limiter.record(str(contact.id))
 
             return Response(
@@ -217,7 +255,7 @@ class StartConversationView(APIView):
             )
 
         except Exception as e:
-            logger.exception("Failed to start conversation")
+            logger.exception("Failed to start conversation via %s", channel)
             message.status = "failed"
             message.error_message = str(e)
             message.save(update_fields=["status", "error_message"])

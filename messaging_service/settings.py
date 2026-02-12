@@ -155,6 +155,10 @@ WHATSAPP_ACCESS_TOKEN = env("WHATSAPP_ACCESS_TOKEN", default="")
 WHATSAPP_VERIFY_TOKEN = env("WHATSAPP_VERIFY_TOKEN", default="")
 WHATSAPP_APP_SECRET = env("WHATSAPP_APP_SECRET", default="")
 
+# Telegram Configuration
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_WEBHOOK_SECRET = env("TELEGRAM_WEBHOOK_SECRET", default="")
+
 # Hub Webhook Configuration
 HUB_WEBHOOK_URL = env("HUB_WEBHOOK_URL", default="")
 HUB_WEBHOOK_SECRET = env("HUB_WEBHOOK_SECRET", default="")

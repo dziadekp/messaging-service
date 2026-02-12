@@ -12,6 +12,7 @@ class ContactProfile(models.Model):
     hub_team_id = models.CharField(max_length=50, db_index=True)
     hub_client_id = models.CharField(max_length=50, db_index=True)
     phone_e164 = models.CharField(max_length=20, db_index=True)  # +15615551234
+    telegram_chat_id = models.BigIntegerField(null=True, blank=True, db_index=True)
     display_name = models.CharField(max_length=255)
     preferred_channel = models.CharField(max_length=20, default="whatsapp")
     timezone = models.CharField(max_length=50, default="America/New_York")
