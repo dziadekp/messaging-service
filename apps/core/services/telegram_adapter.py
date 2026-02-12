@@ -30,16 +30,24 @@ class TelegramAdapter:
         return self._call("sendMessage", payload)
 
     def send_interactive_message(self, chat_id: int, body: str, buttons: list[dict]) -> dict:
-        """Send a message with inline keyboard buttons."""
+        """Send a message with reply keyboard buttons.
+
+        Uses ReplyKeyboardMarkup so the user's tap sends a visible text message
+        in the chat — creating a clear audit trail of their selection.
+        """
         keyboard = []
         for btn in buttons:
-            keyboard.append([{"text": btn["title"], "callback_data": btn["id"]}])
+            keyboard.append([{"text": btn["title"]}])
 
         payload = {
             "chat_id": chat_id,
             "text": body,
             "parse_mode": "HTML",
-            "reply_markup": {"inline_keyboard": keyboard},
+            "reply_markup": {
+                "keyboard": keyboard,
+                "one_time_keyboard": True,
+                "resize_keyboard": True,
+            },
         }
         return self._call("sendMessage", payload)
 

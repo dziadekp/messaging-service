@@ -114,68 +114,16 @@ class TelegramWebhookView(View):
             logger.info("Telegram inbound without active conversation from chat_id=%s", chat_id)
 
     def _process_callback_query(self, callback_query: dict):
-        """Process a Telegram inline keyboard button press."""
+        """Fallback handler for legacy inline keyboard button presses.
+
+        Primary interactive messages now use ReplyKeyboardMarkup which sends
+        visible text messages (handled by _process_message). This handler
+        exists only to acknowledge any stale inline keyboard presses.
+        """
         callback_query_id = callback_query.get("id", "")
-        chat = callback_query.get("message", {}).get("chat", {})
-        chat_id = chat.get("id")
-        data = callback_query.get("data", "")
-
-        # Always answer the callback query to dismiss the loading spinner
-        adapter = TelegramAdapter()
         if callback_query_id:
-            result = adapter.answer_callback_query(callback_query_id)
-            print(f"[TELEGRAM] answerCallbackQuery id={callback_query_id} result={result}", flush=True)
-
-        if not chat_id:
-            return
-
-        # Send a confirmation reply so the user sees their selection
-        if chat_id and data:
-            reply_result = adapter.send_text_message(chat_id=chat_id, body=f"You selected: {data}")
-            print(f"[TELEGRAM] confirmation reply chat_id={chat_id} data={data} result={reply_result}", flush=True)
-
-        try:
-            contact = ContactProfile.objects.get(telegram_chat_id=chat_id)
-        except ContactProfile.DoesNotExist:
-            logger.warning("Telegram callback from unknown chat_id=%s", chat_id)
-            return
-
-        # Create inbound message for the button press
-        inbound_message = Message.objects.create(
-            direction="inbound",
-            body=data,
-            channel_message_id=str(callback_query.get("id", "")),
-            status="received",
-        )
-
-        # Find active conversation
-        active_conversation = (
-            Conversation.objects.filter(
-                contact=contact,
-                status__in=["active", "waiting_reply"],
-            )
-            .order_by("-created_at")
-            .first()
-        )
-
-        if active_conversation:
-            inbound_message.conversation = active_conversation
-            inbound_message.save(update_fields=["conversation"])
-
-            state_machine = StateMachine()
-            state_machine.transition(active_conversation, "on_reply")
-
-            hub_callback = HubCallbackService()
-            hub_callback.client_replied(
-                conversation_id=str(active_conversation.id),
-                contact_id=str(contact.id),
-                reply_text=data,
-                context_type=active_conversation.context_type,
-                context_id=active_conversation.context_id,
-            )
-            logger.info("Telegram callback processed for conversation %s", active_conversation.id)
-        else:
-            logger.info("Telegram callback without active conversation from chat_id=%s", chat_id)
+            adapter = TelegramAdapter()
+            adapter.answer_callback_query(callback_query_id, text="Received")
 
     def _handle_opt_out(self, contact: ContactProfile):
         """Handle contact opting out."""
