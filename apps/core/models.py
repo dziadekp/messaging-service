@@ -8,10 +8,19 @@ from django.db import models
 class ContactProfile(models.Model):
     """Contact that can receive messages. Linked to Hub via IDs (NOT ForeignKeys)."""
 
+    class ContactType(models.TextChoices):
+        CLIENT = "client", "Client"
+        ACCOUNTANT = "accountant", "Accountant"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hub_team_id = models.CharField(max_length=50, db_index=True)
-    hub_client_id = models.CharField(max_length=50, db_index=True)
-    phone_e164 = models.CharField(max_length=20, db_index=True)  # +15615551234
+    hub_client_id = models.CharField(max_length=50, blank=True, default="", db_index=True)
+    contact_type = models.CharField(
+        max_length=20,
+        choices=ContactType.choices,
+        default=ContactType.CLIENT,
+    )
+    phone_e164 = models.CharField(max_length=20, blank=True, default="", db_index=True)
     telegram_chat_id = models.BigIntegerField(null=True, blank=True, db_index=True)
     display_name = models.CharField(max_length=255)
     preferred_channel = models.CharField(max_length=20, default="whatsapp")
@@ -21,11 +30,12 @@ class ContactProfile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [("hub_team_id", "hub_client_id")]
+        unique_together = [("hub_team_id", "hub_client_id", "contact_type")]
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.display_name} ({self.phone_e164})"
+        channel_info = self.phone_e164 or f"tg:{self.telegram_chat_id}" or "no-channel"
+        return f"{self.display_name} ({channel_info})"
 
 
 class ConsentRecord(models.Model):

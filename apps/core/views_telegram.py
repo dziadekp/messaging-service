@@ -63,12 +63,22 @@ class TelegramWebhookView(View):
             logger.info("Telegram /start from chat_id=%s, username=%s", chat_id, chat.get("username", ""))
             return
 
-        # Find contact by telegram_chat_id
-        try:
-            contact = ContactProfile.objects.get(telegram_chat_id=chat_id)
-        except ContactProfile.DoesNotExist:
+        # Find contact by telegram_chat_id (prefer client with active conversation)
+        contacts = ContactProfile.objects.filter(telegram_chat_id=chat_id, is_active=True)
+        if not contacts.exists():
             logger.warning("Telegram message from unknown chat_id=%s", chat_id)
             return
+
+        # If multiple contacts share the same chat_id (e.g., accountant + client),
+        # prefer the one with an active conversation
+        contact = None
+        for c in contacts:
+            active = Conversation.objects.filter(contact=c, status__in=["active", "waiting_reply"]).exists()
+            if active:
+                contact = c
+                break
+        if contact is None:
+            contact = contacts.first()
 
         # Check for opt-out
         if text.strip().upper() in ("STOP", "UNSUBSCRIBE", "CANCEL", "/STOP"):

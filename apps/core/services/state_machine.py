@@ -28,6 +28,20 @@ FLOW_DEFINITIONS = {
         "initial": {"on_send": "notified"},
         "notified": {},
     },
+    "accountant_digest": {
+        "initial": {"on_send": "awaiting_action"},
+        "awaiting_action": {"on_reply": "processing", "on_timeout": "expired"},
+        "processing": {"on_complete": "completed"},
+        "expired": {},
+        "completed": {},
+    },
+    "weekly_batch": {
+        "initial": {"on_send": "awaiting_responses"},
+        "awaiting_responses": {"on_reply": "processing", "on_timeout": "timed_out"},
+        "processing": {"on_complete": "completed", "on_followup": "awaiting_responses"},
+        "timed_out": {},
+        "completed": {},
+    },
 }
 
 
@@ -54,12 +68,11 @@ class StateMachine:
         conversation.current_state = new_state
 
         # Update conversation status based on state
-        if new_state in ("timed_out",):
+        if new_state in ("timed_out", "expired"):
             conversation.status = "timed_out"
-        elif new_state in ("completed", "acknowledged", "notified"):
-            if new_state == "completed":
-                conversation.status = "completed"
-        elif new_state in ("awaiting_response", "awaiting_review"):
+        elif new_state == "completed":
+            conversation.status = "completed"
+        elif new_state in ("awaiting_response", "awaiting_review", "awaiting_action", "awaiting_responses"):
             conversation.status = "waiting_reply"
 
         conversation.save(update_fields=["current_state", "status", "updated_at"])

@@ -14,7 +14,9 @@ class ContactSerializer(serializers.ModelSerializer):
             "id",
             "hub_team_id",
             "hub_client_id",
+            "contact_type",
             "phone_e164",
+            "telegram_chat_id",
             "display_name",
             "preferred_channel",
             "timezone",
@@ -24,7 +26,9 @@ class ContactSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at", "updated_at"]
 
     def validate_phone_e164(self, value):
-        """Validate E.164 format."""
+        """Validate E.164 format (optional — can be empty for Telegram-only contacts)."""
+        if not value:
+            return value
         if not value.startswith("+"):
             raise serializers.ValidationError("Phone must be in E.164 format (e.g., +12345678900)")
         if not value[1:].isdigit():
@@ -68,7 +72,9 @@ class ConsentSerializer(serializers.ModelSerializer):
 class SendMessageSerializer(serializers.Serializer):
     """Serializer for sending a message."""
 
-    contact_id = serializers.UUIDField()
+    contact_id = serializers.UUIDField(required=False)
+    hub_team_id = serializers.CharField(max_length=50, required=False)
+    hub_client_id = serializers.CharField(max_length=50, required=False, default="")
     body = serializers.CharField(max_length=4096, required=False)
     template_name = serializers.CharField(max_length=255, required=False)
     template_params = serializers.JSONField(required=False)
@@ -83,8 +89,14 @@ class SendMessageSerializer(serializers.Serializer):
 class StartConversationSerializer(serializers.Serializer):
     """Serializer for starting a conversation."""
 
-    contact_id = serializers.UUIDField()
-    context_type = serializers.ChoiceField(choices=["clarification", "digest", "reminder", "monthly_call_defer"])
+    # Contact lookup: either by UUID or by Hub IDs
+    contact_id = serializers.UUIDField(required=False)
+    hub_team_id = serializers.CharField(max_length=50, required=False)
+    hub_client_id = serializers.CharField(max_length=50, required=False, default="")
+    contact_type = serializers.ChoiceField(choices=["client", "accountant"], required=False, default="client")
+    context_type = serializers.ChoiceField(
+        choices=["clarification", "digest", "reminder", "monthly_call_defer", "accountant_digest", "weekly_batch"]
+    )
     context_id = serializers.CharField(max_length=255)
     context_data = serializers.JSONField(required=False, default=dict)
     timeout_minutes = serializers.IntegerField(default=1440, min_value=1, max_value=10080)

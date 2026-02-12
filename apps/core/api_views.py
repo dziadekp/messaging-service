@@ -51,12 +51,21 @@ class SendMessageView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        contact_id = data["contact_id"]
 
-        # Get contact
-        try:
-            contact = ContactProfile.objects.get(id=contact_id)
-        except ContactProfile.DoesNotExist:
+        # Resolve contact: by UUID or by Hub IDs
+        contact = None
+        if data.get("contact_id"):
+            try:
+                contact = ContactProfile.objects.get(id=data["contact_id"])
+            except ContactProfile.DoesNotExist:
+                pass
+        elif data.get("hub_team_id"):
+            contact = ContactProfile.objects.filter(
+                hub_team_id=data["hub_team_id"],
+                hub_client_id=data.get("hub_client_id", ""),
+            ).first()
+
+        if contact is None:
             return Response(
                 {"error": "Contact not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -152,12 +161,22 @@ class StartConversationView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         data = serializer.validated_data
-        contact_id = data["contact_id"]
 
-        # Get contact
-        try:
-            contact = ContactProfile.objects.get(id=contact_id)
-        except ContactProfile.DoesNotExist:
+        # Resolve contact: by UUID or by Hub IDs
+        contact = None
+        if data.get("contact_id"):
+            try:
+                contact = ContactProfile.objects.get(id=data["contact_id"])
+            except ContactProfile.DoesNotExist:
+                pass
+        elif data.get("hub_team_id"):
+            contact = ContactProfile.objects.filter(
+                hub_team_id=data["hub_team_id"],
+                hub_client_id=data.get("hub_client_id", ""),
+                contact_type=data.get("contact_type", "client"),
+            ).first()
+
+        if contact is None:
             return Response(
                 {"error": "Contact not found"},
                 status=status.HTTP_404_NOT_FOUND,
@@ -297,10 +316,12 @@ class CreateContactView(APIView):
 
         data = serializer.validated_data
 
-        # Get or create by hub_team_id + hub_client_id
+        # Get or create by hub_team_id + hub_client_id + contact_type
+        contact_type = data.get("contact_type", "client")
         contact, created = ContactProfile.objects.get_or_create(
             hub_team_id=data["hub_team_id"],
-            hub_client_id=data["hub_client_id"],
+            hub_client_id=data.get("hub_client_id", ""),
+            contact_type=contact_type,
             defaults=data,
         )
 
