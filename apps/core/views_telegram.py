@@ -129,9 +129,10 @@ class TelegramWebhookView(View):
         if not chat_id:
             return
 
-        # Send a confirmation reply so the user sees feedback
+        # Send a confirmation reply so the user sees their selection
         if chat_id and data:
-            adapter.send_text_message(chat_id=chat_id, body=f"Got it: {data}")
+            reply_result = adapter.send_text_message(chat_id=chat_id, body=f"You selected: {data}")
+            print(f"[TELEGRAM] confirmation reply chat_id={chat_id} data={data} result={reply_result}", flush=True)
 
         try:
             contact = ContactProfile.objects.get(telegram_chat_id=chat_id)
