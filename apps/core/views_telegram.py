@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from .models import ContactProfile, Conversation, Message
 from .services.hub_callback import HubCallbackService
 from .services.state_machine import StateMachine
+from .services.telegram_adapter import TelegramAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +115,15 @@ class TelegramWebhookView(View):
 
     def _process_callback_query(self, callback_query: dict):
         """Process a Telegram inline keyboard button press."""
+        callback_query_id = callback_query.get("id", "")
         chat = callback_query.get("message", {}).get("chat", {})
         chat_id = chat.get("id")
         data = callback_query.get("data", "")
+
+        # Always answer the callback query to dismiss the loading spinner
+        if callback_query_id:
+            adapter = TelegramAdapter()
+            adapter.answer_callback_query(callback_query_id)
 
         if not chat_id:
             return

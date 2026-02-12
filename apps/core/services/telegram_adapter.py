@@ -43,6 +43,13 @@ class TelegramAdapter:
         }
         return self._call("sendMessage", payload)
 
+    def answer_callback_query(self, callback_query_id: str, text: str = "") -> dict:
+        """Acknowledge a callback query (dismiss the loading spinner on button press)."""
+        payload = {"callback_query_id": callback_query_id}
+        if text:
+            payload["text"] = text
+        return self._call("answerCallbackQuery", payload)
+
     def set_webhook(self, url: str) -> dict:
         """Register a webhook URL with Telegram."""
         payload = {
