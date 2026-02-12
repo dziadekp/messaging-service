@@ -121,12 +121,17 @@ class TelegramWebhookView(View):
         data = callback_query.get("data", "")
 
         # Always answer the callback query to dismiss the loading spinner
+        adapter = TelegramAdapter()
         if callback_query_id:
-            adapter = TelegramAdapter()
-            adapter.answer_callback_query(callback_query_id)
+            result = adapter.answer_callback_query(callback_query_id)
+            print(f"[TELEGRAM] answerCallbackQuery id={callback_query_id} result={result}", flush=True)
 
         if not chat_id:
             return
+
+        # Send a confirmation reply so the user sees feedback
+        if chat_id and data:
+            adapter.send_text_message(chat_id=chat_id, body=f"Got it: {data}")
 
         try:
             contact = ContactProfile.objects.get(telegram_chat_id=chat_id)
