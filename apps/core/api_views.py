@@ -63,6 +63,7 @@ class SendMessageView(APIView):
             contact = ContactProfile.objects.filter(
                 hub_team_id=data["hub_team_id"],
                 hub_client_id=data.get("hub_client_id", ""),
+                contact_type=data.get("contact_type", "client"),
             ).first()
 
         if contact is None:

@@ -75,6 +75,7 @@ class SendMessageSerializer(serializers.Serializer):
     contact_id = serializers.UUIDField(required=False)
     hub_team_id = serializers.CharField(max_length=50, required=False)
     hub_client_id = serializers.CharField(max_length=50, required=False, default="")
+    contact_type = serializers.ChoiceField(choices=["client", "accountant"], required=False, default="client")
     body = serializers.CharField(max_length=4096, required=False)
     template_name = serializers.CharField(max_length=255, required=False)
     template_params = serializers.JSONField(required=False)
@@ -153,6 +154,7 @@ class ConversationStatusSerializer(serializers.ModelSerializer):
             "id",
             "status",
             "current_state",
+            "context_data",
             "messages",
             "created_at",
             "updated_at",
