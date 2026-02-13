@@ -8,6 +8,10 @@ from .models import ConsentRecord, ContactProfile, Conversation, Message
 class ContactSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating contacts."""
 
+    # Allow blank for Telegram-only accountant contacts (no client ID, no phone)
+    hub_client_id = serializers.CharField(max_length=50, required=False, default="", allow_blank=True)
+    phone_e164 = serializers.CharField(max_length=20, required=False, default="", allow_blank=True)
+
     class Meta:
         model = ContactProfile
         fields = [
@@ -96,7 +100,15 @@ class StartConversationSerializer(serializers.Serializer):
     hub_client_id = serializers.CharField(max_length=50, required=False, default="")
     contact_type = serializers.ChoiceField(choices=["client", "accountant"], required=False, default="client")
     context_type = serializers.ChoiceField(
-        choices=["clarification", "digest", "reminder", "monthly_call_defer", "accountant_digest", "weekly_batch"]
+        choices=[
+            "clarification",
+            "digest",
+            "reminder",
+            "monthly_call_defer",
+            "accountant_digest",
+            "weekly_batch",
+            "waiting_room_review",
+        ]
     )
     context_id = serializers.CharField(max_length=255)
     context_data = serializers.JSONField(required=False, default=dict)
